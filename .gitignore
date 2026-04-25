@@ -1,8 +1,25 @@
-includes/
-src/
+# dependencies
+/vendor/
 
-vendor/
+# build / runtime
+/var/
+*.log
+
+# test / dev
+/tests/
 stubs/
-tests/
-var/
-upravit RequestGuard, aby byl algoritmus‑agnostický.txt
+
+# env
+.env
+.env.*
+
+# ide / os
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# misc
+*.zip
+*.sql
+*.txt
