@@ -1,0 +1,5 @@
+upravit RequestGuard, aby byl algoritmus-agnostický
+? sjednotit ApifySyncService typování
+? doplnit rotaci Ed25519 klíèù
+? doplnit admin UI pro pøepínání algoritmu
+

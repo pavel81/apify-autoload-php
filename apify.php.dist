@@ -1,0 +1,38 @@
+<?php
+/*
+Plugin Name: Panda Apify Product
+Description: Import produktů z Apify feedu + cenové statistiky
+Version: 1.0.0
+Author: Panda
+*/
+
+if (!defined('ABSPATH')) {
+    exit;
+}
+
+define('APIFY_FILE', __FILE__);
+define('APIFY_PATH', plugin_dir_path(__FILE__));
+define('APIFY_URL', plugin_dir_url(__FILE__));
+
+/**
+ * Autoload (pokud používáš composer)
+ */
+if (file_exists(APIFY_PATH . 'vendor/autoload.php')) {
+    require_once APIFY_PATH . 'vendor/autoload.php';
+}
+
+/**
+ * Bootstrap
+ */
+require_once APIFY_PATH . 'src/bootstrap.php';
+
+\Panda\Apify\Bootstrap::init();
+
+/**
+ * Install / Uninstall (procedurální – správně)
+ */
+require_once APIFY_PATH . 'includes/install.php';
+require_once APIFY_PATH . 'includes/uninstall.php';
+
+register_activation_hook(__FILE__, 'apify_install');
+register_uninstall_hook(__FILE__, 'apify_uninstall');

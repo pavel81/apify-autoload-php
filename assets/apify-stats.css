@@ -1,0 +1,19 @@
+.apify-badge {
+  display: inline-block;
+  padding: .2rem .5rem;
+  border-radius: .4rem;
+  background: #111;
+  color: #fff;
+  font-weight: 600;
+  font-size: .85rem;
+  line-height: 1;
+  vertical-align: middle;
+}
+
+.apify-price-box {
+  border: 1px solid #e5e7eb;
+  background: #f9fafb;
+  padding: 10px 12px;
+  border-radius: 6px;
+  margin: .5rem 0 1rem;
+}

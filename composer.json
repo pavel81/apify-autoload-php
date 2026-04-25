@@ -1,0 +1,37 @@
+{
+  "name": "panda/wp-apify-product",
+  "description": "WordPress plugin pro Apify feed, produkty, obrázky, statistiky a shortcody.",
+  "type": "wordpress-plugin",
+  "license": "proprietary",
+  "private": true,
+  "autoload": {
+    "psr-4": {
+      "Panda\\Apify\\": "includes/"
+    }
+  },
+  "config": {
+    "optimize-autoloader": true,
+    "sort-packages": true
+  },
+  "require": {
+    "firebase/php-jwt": "^7.0",
+    "guzzlehttp/guzzle": "^7.10",
+    "opis/json-schema": "^2.6"
+  },
+      "require-dev": {
+    "brain/monkey": "^2.6",
+    "mockery/mockery": "^1.6",
+    "php-stubs/wordpress-stubs": "^6.9",
+    "php-stubs/wp-cli-stubs": "^2.12",
+    "phpstan/phpstan": "^2.1",
+    "phpunit/phpunit": "9.6",
+    "szepeviktor/phpstan-wordpress": "^2.0"
+  },
+          "scripts": {
+        "test": "php vendor/phpunit/phpunit/phpunit --configuration phpunit.xml.dist",
+        "test:unit": "phpunit --configuration phpunit.unit.xml.dist",
+        "test:wp": "phpunit --configuration phpunit.wp.xml.dist",
+        "analyse": "php vendor/bin/phpstan analyse -c phpstan.neon --memory-limit=1G",
+        "coverage": "vendor/bin/phpunit --configuration phpunit.xml.dist --coverage-text"
+        }
+}

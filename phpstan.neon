@@ -1,0 +1,42 @@
+parameters:
+    level: 8
+
+    paths:
+        - src
+        - includes
+
+    tmpDir: var/phpstan
+
+    bootstrapFiles:
+        - %currentWorkingDirectory%/src/phpstan-bootstrap.php
+
+    scanDirectories:
+        - vendor/php-stubs/wordpress-stubs
+
+    stubFiles:
+        - tools/phpstan/stubs/wordpress.stub.php
+        - tools/phpstan/stubs/wp-rest.stub.php
+
+    inferPrivatePropertyTypeFromConstructor: true
+    treatPhpDocTypesAsCertain: false
+
+    ignoreErrors:
+        # WP_Error union types
+        - '#array<string, mixed>\|WP_Error#'
+        - '#array<int, array<string, mixed>>\|WP_Error#'
+
+        # WP_Error methods on union types
+        - '#Cannot call method get_error_message#'
+
+        # Accessing array offsets on array|WP_Error
+        - '#offsetAccess.nonOffsetAccessible#'
+
+        # foreach on array|WP_Error
+        - '#foreach.nonIterable#'
+
+        # wpdb::prepare literal-string
+        - '#expects literal-string#'
+
+includes:
+    - vendor/phpstan/phpstan/conf/bleedingEdge.neon
+    - vendor/szepeviktor/phpstan-wordpress/extension.neon
