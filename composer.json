@@ -11,7 +11,10 @@
   },
   "config": {
     "optimize-autoloader": true,
-    "sort-packages": true
+    "sort-packages": true,
+    "allow-plugins": {
+      "infection/extension-installer": true
+    }
   },
   "require": {
     "firebase/php-jwt": "^7.0",
@@ -20,6 +23,7 @@
   },
       "require-dev": {
     "brain/monkey": "^2.6",
+    "infection/infection": "^0.32.6",
     "mockery/mockery": "^1.6",
     "php-stubs/wordpress-stubs": "^6.9",
     "php-stubs/wp-cli-stubs": "^2.12",

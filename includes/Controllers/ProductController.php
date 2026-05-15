@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Panda\Apify\Api\Controllers;
+namespace Panda\Apify\Controllers;
 
 use Panda\Apify\Services\ProductService;
 use WP_REST_Request;

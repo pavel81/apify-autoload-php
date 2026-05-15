@@ -1,0 +1,44 @@
+?php
+/**
+ * Plugin Name: Panda Bridge – Apify batch enrich (DIST)
+ * Description: Záloha. Batch doplnění dotací (is_funded, funded_by, allowance_tag) do Apify feedu.
+ */
+
+if (!defined('ABSPATH')) exit;
+
+/**
+ * PŮVODNÍ: Jen batch obohacení (žádná filtrace allowance_only).
+ * - Volá interní funkci z Allowance: panda_allowance_evaluate_batch($user_id, $product_ids)
+ * - Nedělá žádný JOIN/úpravu SQL; pouze enrich na hotových položkách.
+ */
+add_filter('apify_products_batch', function(array $items, array $ctx){
+    if (empty($items)) return $items;
+
+    $ids = [];
+    foreach ($items as $r) {
+        if (!empty($r['id'])) $ids[] = (int)$r['id'];
+    }
+    $ids = array_values(array_unique($ids));
+    if (!$ids) return $items;
+
+    $userId = isset($ctx['user_id']) ? (int)$ctx['user_id'] : 0;
+
+    // Rychlé interní PHP volání do Allowance (pokud existuje)
+    $map = function_exists('panda_allowance_evaluate_batch')
+        ? (array) panda_allowance_evaluate_batch($userId, $ids)
+        : [];
+
+    if (!$map) return $items;
+
+    foreach ($items as &$row) {
+        $pid = isset($row['id']) ? (int)$row['id'] : 0;
+        if ($pid && isset($map[$pid])) {
+            $row['is_funded']      = (int)($map[$pid]['is_funded'] ?? 0);
+            $row['funded_by']      = isset($map[$pid]['funded_by']) ? sanitize_text_field($map[$pid]['funded_by']) : null;
+            $row['allowance_tag']  = isset($map[$pid]['allowance_tag']) ? sanitize_text_field($map[$pid]['allowance_tag']) : null;
+        }
+    }
+    unset($row);
+
+    return $items;
+}, 10, 2);

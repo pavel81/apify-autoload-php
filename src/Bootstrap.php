@@ -11,6 +11,9 @@ use Panda\Apify\Cron\CronScheduler;
 use Panda\Apify\Presentation\ProductPage;
 use Panda\Apify\Shortcodes\ProductShortcode;
 use Panda\Apify\Api\Controllers\DebugCanonicalController;
+use Panda\Api\Routes\RoutesBootstrap;
+use Panda\Api\ClickTracker;
+use Panda\Api\EventIngestEndpoint;
 
 final class Bootstrap
 {
@@ -81,8 +84,8 @@ final class Bootstrap
         });
         
         
-        'permission_callback' => function () {
-    // jen admin + debug reûim + localhost
+        'permission_callback' -> function () {
+    // jen admin + debug re≈æim + localhost
     $isLocal = in_array($_SERVER['REMOTE_ADDR'] ?? '', ['127.0.0.1', '::1'], true);
 
     return $isLocal
@@ -114,5 +117,17 @@ final class Bootstrap
         CronScheduler::register();
         CronScheduler::schedule();
         LogsPage::register();
+        
+        add_action('init', function (): void {
+    RoutesBootstrap::init();
+});
+
+add_action('init', function (): void {
+    ClickTracker::init();
+});
+
+add_action('rest_api_init', function (): void {
+    EventIngestEndpoint::init();
+});
     }
 }
