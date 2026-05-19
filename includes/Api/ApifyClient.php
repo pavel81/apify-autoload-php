@@ -6,10 +6,6 @@ namespace Panda\Apify\Api;
 
 use WP_Error;
 
-if (!defined('ABSPATH')) {
-    exit;
-}
-
 final class ApifyClient
 {
     private string $token;
@@ -17,15 +13,10 @@ final class ApifyClient
 
     public function __construct(?string $token = null, string $baseUrl = 'https://api.apify.com/v2')
     {
-        $this->token   = $token ?? (string) get_option('apify_api_token', '');
+        $this->token = $token ?? (string) get_option('apify_api_token', '');
         $this->baseUrl = rtrim($baseUrl, '/');
     }
 
-    /**
-     * @param string $actorId
-     * @param array<string, mixed> $input
-     * @return array<string, mixed>|WP_Error
-     */
     public function runActor(string $actorId, array $input = [])
     {
         $url = "{$this->baseUrl}/acts/{$actorId}/runs?token={$this->token}";
@@ -35,11 +26,6 @@ final class ApifyClient
         ]);
     }
 
-    /**
-     * @param string $datasetId
-     * @param int $limit
-     * @return array<string, mixed>|WP_Error
-     */
     public function getDatasetItems(string $datasetId, int $limit = 100)
     {
         $url = "{$this->baseUrl}/datasets/{$datasetId}/items?token={$this->token}&limit={$limit}&clean=true";
@@ -53,10 +39,6 @@ final class ApifyClient
         return is_array($response) ? $response : [];
     }
 
-    /**
-     * @param string $runId
-     * @return array<string, mixed>|WP_Error
-     */
     public function getRun(string $runId)
     {
         $url = "{$this->baseUrl}/actor-runs/{$runId}?token={$this->token}";
@@ -64,11 +46,6 @@ final class ApifyClient
         return $this->request('GET', $url);
     }
 
-    /**
-     * @param string $runId
-     * @param int $timeoutSec
-     * @return array<string, mixed>|WP_Error
-     */
     public function waitForRun(string $runId, int $timeoutSec = 60)
     {
         $start = time();
@@ -92,12 +69,6 @@ final class ApifyClient
         return new WP_Error('apify_timeout', 'Apify run timeout');
     }
 
-    /**
-     * @param string $method
-     * @param string $url
-     * @param array<string, mixed> $options
-     * @return array<string, mixed>|WP_Error
-     */
     private function request(string $method, string $url, array $options = [])
     {
         $args = [
