@@ -12,6 +12,14 @@ use Panda\Apify\Queries\ProductRepository;
 use Panda\Apify\Services\ProductClassificationService;
 use PHPUnit\Framework\TestCase;
 
+function sanitize_title_shim(string $value): string
+{
+    $value = strtolower(trim($value));
+    $value = preg_replace('/[^a-z0-9]+/i', '-', $value) ?? $value;
+
+    return trim($value, '-');
+}
+
 final class ProductImportServiceTest extends TestCase
 {
     protected function setUp(): void
@@ -20,15 +28,7 @@ final class ProductImportServiceTest extends TestCase
 
         \Brain\Monkey\setUp();
 
-        Functions\when('sanitize_title')->alias(
-            function (string $value) {
-                $value = strtolower(trim($value));
-                $value = preg_replace('/[^a-z0-9]+/i', '-', $value) ?? $value;
-
-                return trim($value, '-');
-            }
-        );
-
+        Functions\when('sanitize_title')->alias(__NAMESPACE__ . '\\sanitize_title_shim');
         Functions\when('get_transient')->justReturn(false);
         Functions\when('set_transient')->justReturn(true);
         Functions\when('delete_transient')->justReturn(true);
@@ -84,18 +84,40 @@ final class ProductImportServiceTest extends TestCase
 
         $productRepository->expects($this->once())
             ->method('upsertProduct')
+            ->with($this->anything())
             ->willReturn(123);
 
         $productRepository->expects($this->once())
             ->method('insertPrice')
+            ->with(
+                123,
+                'amazon',
+                'eu',
+                'sku-123',
+                1299.9,
+                'EUR'
+            )
             ->willReturn(null);
 
         $productRepository->expects($this->once())
             ->method('mapCanonical')
+            ->with(
+                123,
+                $this->anything(),
+                'amazon',
+                'eu'
+            )
             ->willReturn(null);
 
         $classificationService->expects($this->once())
             ->method('syncCanonical')
+            ->with(
+                $this->anything(),
+                $this->anything(),
+                $this->anything(),
+                $this->anything(),
+                true
+            )
             ->willReturn([]);
 
         $service = new ProductImportService(

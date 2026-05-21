@@ -31,7 +31,8 @@ final class ProductImportGuardTest extends TestCase
             ->andReturn(true);
 
         Functions\expect('delete_transient')
-            ->once();
+            ->once()
+            ->andReturn(true);
 
         $guard = new ProductImportGuard();
 
