@@ -2,7 +2,7 @@
 // tests/shortcodes/limits/ShortcodeEmptyTest.php
 
 declare(strict_types=1);
-namespace Panda\Apify\Tests\Unit\Shortcodes\Limits;
+namespace Tests\Unit\Shortcodes\Limits;
 use PHPUnit\Framework\TestCase;
 use Panda\Apify\Shortcodes\ShortcodeManager;
 

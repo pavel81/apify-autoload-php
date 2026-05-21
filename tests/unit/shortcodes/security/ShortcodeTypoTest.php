@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Panda\Apify\Tests\Unit\Shortcodes\Security;
+namespace Tests\Unit\Shortcodes\Security;
 
 use Panda\Apify\Shortcodes\ShortcodeManager;
 use PHPUnit\Framework\TestCase;

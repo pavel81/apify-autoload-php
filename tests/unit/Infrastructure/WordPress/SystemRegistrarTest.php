@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Panda\Apify\Tests\Unit\Infrastructure\WordPress;
+namespace Tests\Unit\Infrastructure\WordPress;
 
 use Brain\Monkey\Actions;
 use Brain\Monkey\Filters;

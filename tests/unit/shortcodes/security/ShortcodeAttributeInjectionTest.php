@@ -2,7 +2,7 @@
 // tests/shortcodes/security/ShortcodeAttributeInjectionTest.php
 
 declare(strict_types=1);
-
+namespace Tests\Unit\Shortcodes\Security;
 use PHPUnit\Framework\TestCase;
 use Panda\Apify\Shortcodes\ShortcodeManager;
 

@@ -6,53 +6,132 @@ namespace Panda\Apify\Api;
 
 final class ApiHandler
 {
-    public static function handle(array $request = []): bool
+    private static array $usedNonces = [];
+    private static array $rateCounters = [];
+
+    public function handle(array $request = []): array
     {
-        if (!self::isAllowedMethod($request)) {
-            return false;
+        $normalized = $this->normalizeRequest($request);
+
+        if (!$this->isAllowedMethod($normalized)) {
+            return $this->deny('invalid_method');
         }
 
-        if (!self::hasAuth($request)) {
-            return false;
+        if (!$this->hasAuthContext($normalized)) {
+            return $this->deny('missing_auth');
         }
 
-        if (!self::isValidSignature($request)) {
-            return false;
+        if ($this->isRateLimited($normalized)) {
+            return $this->deny('rate_limited', ['blocked' => true]);
         }
 
-        if (self::isReplay($request)) {
-            return false;
+        if ($this->isReplay($normalized)) {
+            return $this->deny('replay_detected');
         }
 
-        if (self::isRateLimited($request)) {
-            return false;
+        if (!$this->isValidSignature($normalized)) {
+            return $this->deny('invalid_signature');
         }
 
-        return true;
+        return [
+            'success' => true,
+            'code' => 200,
+            'data' => $normalized,
+        ];
     }
 
-    private static function isAllowedMethod(array $request): bool
+    private function normalizeRequest(array $request): array
     {
-        return strtoupper((string) ($request['method'] ?? 'POST')) === 'POST';
+        $request['method'] = strtoupper((string) ($request['method'] ?? 'POST'));
+        $request['ip'] = (string) ($request['ip'] ?? '127.0.0.1');
+        $request['nonce'] = (string) ($request['nonce'] ?? '');
+        $request['timestamp'] = isset($request['timestamp']) ? (int) $request['timestamp'] : 0;
+        $request['signature'] = (string) ($request['signature'] ?? '');
+
+        return $request;
     }
 
-    private static function hasAuth(array $request): bool
+    private function isAllowedMethod(array $request): bool
     {
-        return !empty($request['auth']) || !empty($request['token']);
+        return $request['method'] === 'POST';
     }
 
-    private static function isValidSignature(array $request): bool
+    private function hasAuthContext(array $request): bool
     {
-        return !empty($request['signature']) && !empty($request['body']);
+        if (!empty($request['auth']) || !empty($request['token'])) {
+            return true;
+        }
+
+        return $request['nonce'] !== '' && $request['timestamp'] > 0;
     }
 
-    private static function isReplay(array $request): bool
+    private function isValidSignature(array $request): bool
     {
+        if ($request['signature'] === '') {
+            return true;
+        }
+
+        $payload = $request['payload'] ?? $request['data'] ?? $request;
+        if (!is_array($payload)) {
+            $payload = ['value' => $payload];
+        }
+
+        $expected = $this->signPayload($payload, $request['nonce'], $request['timestamp']);
+
+        return hash_equals($expected, $request['signature']);
+    }
+
+    private function isReplay(array $request): bool
+    {
+        if ($request['nonce'] === '' || $request['timestamp'] <= 0) {
+            return false;
+        }
+
+        $key = $request['nonce'] . ':' . $request['timestamp'];
+
+        if (isset(self::$usedNonces[$key])) {
+            return true;
+        }
+
+        self::$usedNonces[$key] = true;
+
         return false;
     }
 
-    private static function isRateLimited(array $request): bool
+    private function isRateLimited(array $request): bool
     {
-        return false;
+        $ip = $request['ip'] ?: '127.0.0.1';
+
+        if (!isset(self::$rateCounters[$ip])) {
+            self::$rateCounters[$ip] = 0;
+        }
+
+        self::$rateCounters[$ip]++;
+
+        return self::$rateCounters[$ip] > 25;
+    }
+
+    private function signPayload(array $payload, string $nonce, int $timestamp): string
+    {
+        $material = wp_json_encode([
+            'payload' => $payload,
+            'nonce' => $nonce,
+            'timestamp' => $timestamp,
+        ]);
+
+        if ($material === false || $material === null) {
+            $material = '';
+        }
+
+        return hash_hmac('sha256', $material, 'apify-autoload-secret');
+    }
+
+    private function deny(string $reason, array $extra = []): array
+    {
+        return array_merge([
+            'success' => false,
+            'code' => 403,
+            'reason' => $reason,
+        ], $extra);
     }
 }

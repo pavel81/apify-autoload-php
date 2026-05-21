@@ -2,8 +2,6 @@
 
 declare(strict_types=1);
 
-namespace Plugin\Infrastructure\Db;
-
 if (!defined('ABSPATH')) {
     exit;
 }
@@ -12,50 +10,15 @@ final class Schema
 {
     public static function install(): void
     {
-      /** @var \wpdb $wpdb */
         global $wpdb;
 
-        $table = $wpdb->prefix . 'hb_offer_clicks';
-        $charsetCollate = $wpdb->get_charset_collate();
-
-        require_once ABSPATH . 'wp-admin/includes/upgrade.php';
-
-        $sql = "
-        CREATE TABLE {$table} (
-            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-            device_id VARCHAR(64) NOT NULL,
-            user_id BIGINT UNSIGNED NULL,
-            product_hash VARCHAR(64) NOT NULL,
-            shop VARCHAR(100) NOT NULL,
-            price DECIMAL(10,2) NULL,
-            created_at DATETIME NOT NULL,
-
-            KEY device_id (device_id),
-            KEY product_hash (product_hash),
-            UNIQUE KEY user_device (user_id, id),
-
-            -- 🔥 DEDUPE INDEX
-            KEY idx_click_dedupe (device_id, product_hash, shop)
-            KEY created_at (created_at)
-
-        ) {$charsetCollate};
-        ";
-
-        
-    
-
-
         require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 
         $charsetCollate = $wpdb->get_charset_collate();
-
         $prefix = $wpdb->prefix;
 
-        // 🔥 PRODUCTS
-        $products = "{$prefix}apify_products";
-
-        $sqlProducts = "
-        CREATE TABLE {$products} (
+        // PRODUCTS
+        $sqlProducts = "CREATE TABLE {$prefix}apify_products (
             id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             external_id VARCHAR(191) NOT NULL,
             sku VARCHAR(191) NOT NULL,
@@ -76,14 +39,10 @@ final class Schema
             KEY external_idx (external_id),
             KEY canonical_idx (canonical_hash),
             KEY slug_idx (slug)
-        ) {$charsetCollate};
-        ";
+        ) {$charsetCollate};";
 
-        // 🔥 PRICE HISTORY
-        $prices = "{$prefix}apify_price_history";
-
-        $sqlPrices = "
-        CREATE TABLE {$prices} (
+        // PRICE HISTORY
+        $sqlPrices = "CREATE TABLE {$prefix}apify_price_history (
             id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             product_id BIGINT UNSIGNED NOT NULL,
             shop VARCHAR(100) NOT NULL,
@@ -96,14 +55,10 @@ final class Schema
             KEY product_idx (product_id),
             KEY price_idx (price),
             KEY created_idx (created_at)
-        ) {$charsetCollate};
-        ";
+        ) {$charsetCollate};";
 
-        // 🔥 CANONICAL MAP
-        $map = "{$prefix}apify_product_map";
-
-        $sqlMap = "
-        CREATE TABLE {$map} (
+        // CANONICAL MAP
+        $sqlMap = "CREATE TABLE {$prefix}apify_product_map (
             id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             canonical_hash VARCHAR(64) NOT NULL,
             product_id BIGINT UNSIGNED NOT NULL,
@@ -112,14 +67,10 @@ final class Schema
             PRIMARY KEY (id),
             KEY canonical_idx (canonical_hash),
             KEY product_idx (product_id)
-        ) {$charsetCollate};
-        ";
+        ) {$charsetCollate};";
 
-        // 🔥 REVIEWS
-        $reviews = "{$prefix}apify_reviews";
-
-        $sqlReviews = "
-        CREATE TABLE {$reviews} (
+        // REVIEWS
+        $sqlReviews = "CREATE TABLE {$prefix}apify_reviews (
             id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             canonical_hash VARCHAR(64) NOT NULL,
             rating DECIMAL(2,1) NOT NULL,
@@ -127,14 +78,10 @@ final class Schema
             created_at DATETIME NOT NULL,
             PRIMARY KEY (id),
             KEY hash_idx (canonical_hash)
-        ) {$charsetCollate};
-        ";
+        ) {$charsetCollate};";
 
-        // 🔥 LOGS
-        $logs = "{$prefix}apify_logs";
-
-        $sqlLogs = "
-        CREATE TABLE {$logs} (
+        // LOGS
+        $sqlLogs = "CREATE TABLE {$prefix}apify_logs (
             id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             type VARCHAR(50) NOT NULL,
             message TEXT NOT NULL,
@@ -143,14 +90,10 @@ final class Schema
             PRIMARY KEY (id),
             KEY type_idx (type),
             KEY created_idx (created_at)
-        ) {$charsetCollate};
-        ";
+        ) {$charsetCollate};";
 
-        // 🔥 FEEDS
-        $feeds = "{$prefix}apify_feeds";
-
-        $sqlFeeds = "
-        CREATE TABLE {$feeds} (
+        // FEEDS
+        $sqlFeeds = "CREATE TABLE {$prefix}apify_feeds (
             id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             name VARCHAR(191) NOT NULL,
             actor_id VARCHAR(191),
@@ -164,48 +107,142 @@ final class Schema
             created_at DATETIME NOT NULL,
             PRIMARY KEY (id),
             KEY active_idx (is_active)
-        ) {$charsetCollate};
-        ";
-        $sqlClicks = "
-CREATE TABLE {$wpdb->prefix}hb_offer_clicks (
-    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    device_id VARCHAR(64) NOT NULL,
-    user_id BIGINT UNSIGNED NULL,
-    product_hash VARCHAR(64) NOT NULL,
-    shop VARCHAR(100) NOT NULL,
-    price DECIMAL(10,2) NULL,
-    created_at DATETIME NOT NULL,
-    KEY device_id (device_id),
-    KEY user_id (user_id),
-    KEY product_hash (product_hash)
-) {$charsetCollate};
-";
+        ) {$charsetCollate};";
 
-$sqlClicks = "CREATE TABLE wp_hb_devices (
-    id VARCHAR(64) NOT NULL,
-    user_id BIGINT UNSIGNED NULL,
+        // CLICKS
+        $sqlClicks = "CREATE TABLE {$prefix}hb_offer_clicks (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            device_id VARCHAR(64) NOT NULL,
+            user_id BIGINT UNSIGNED NULL,
+            product_hash VARCHAR(64) NOT NULL,
+            shop VARCHAR(100) NOT NULL,
+            price DECIMAL(10,2) NULL,
+            created_at DATETIME NOT NULL,
+            PRIMARY KEY (id),
+            KEY device_id (device_id),
+            KEY user_id (user_id),
+            KEY product_hash (product_hash),
+            KEY created_at (created_at)
+        ) {$charsetCollate};";
 
-    public_key TEXT NOT NULL,
+        // DEVICES
+        $sqlDevices = "CREATE TABLE {$prefix}wp_hb_devices (
+            id VARCHAR(64) NOT NULL,
+            user_id BIGINT UNSIGNED NULL,
+            public_key TEXT NOT NULL,
+            device_name VARCHAR(100) NULL,
+            platform VARCHAR(20) NULL,
+            device_type VARCHAR(20) NULL,
+            app_version VARCHAR(20) NULL,
+            locale VARCHAR(10) NULL,
+            last_seen_at DATETIME NULL,
+            created_at DATETIME NOT NULL,
+            PRIMARY KEY (id),
+            KEY user_id (user_id),
+            KEY last_seen_at (last_seen_at)
+        ) {$charsetCollate};";
 
-    device_name VARCHAR(100) NULL,
-    platform VARCHAR(20) NULL,
-    device_type VARCHAR(20) NULL,
-    app_version VARCHAR(20) NULL,
-    locale VARCHAR(10) NULL,
+        // PRODUCT USE CASES
+        $sqlUseCases = "CREATE TABLE {$prefix}apify_product_use_cases (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            slug VARCHAR(191) NOT NULL,
+            name VARCHAR(191) NOT NULL,
+            description TEXT NULL,
+            is_active TINYINT(1) NOT NULL DEFAULT 1,
+            sort_order INT NOT NULL DEFAULT 0,
+            created_at DATETIME NOT NULL,
+            updated_at DATETIME NOT NULL,
+            PRIMARY KEY (id),
+            UNIQUE KEY slug_idx (slug),
+            KEY active_idx (is_active),
+            KEY sort_idx (sort_order)
+        ) {$charsetCollate};";
 
-    last_seen_at DATETIME NULL,
-    created_at DATETIME NOT NULL,
+        // PRODUCT GROUPS
+        $sqlGroups = "CREATE TABLE {$prefix}apify_product_groups (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            slug VARCHAR(191) NOT NULL,
+            name VARCHAR(191) NOT NULL,
+            description TEXT NULL,
+            parent_id BIGINT UNSIGNED NULL,
+            is_active TINYINT(1) NOT NULL DEFAULT 1,
+            sort_order INT NOT NULL DEFAULT 0,
+            created_at DATETIME NOT NULL,
+            updated_at DATETIME NOT NULL,
+            PRIMARY KEY (id),
+            UNIQUE KEY slug_idx (slug),
+            KEY parent_idx (parent_id),
+            KEY active_idx (is_active),
+            KEY sort_idx (sort_order)
+        ) {$charsetCollate};";
 
-    PRIMARY KEY (id),
+        // PRODUCT TAGS
+        $sqlTags = "CREATE TABLE {$prefix}apify_product_tags (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            slug VARCHAR(191) NOT NULL,
+            name VARCHAR(191) NOT NULL,
+            description TEXT NULL,
+            is_active TINYINT(1) NOT NULL DEFAULT 1,
+            sort_order INT NOT NULL DEFAULT 0,
+            created_at DATETIME NOT NULL,
+            updated_at DATETIME NOT NULL,
+            PRIMARY KEY (id),
+            UNIQUE KEY slug_idx (slug),
+            KEY active_idx (is_active),
+            KEY sort_idx (sort_order)
+        ) {$charsetCollate};";
 
-    KEY user_id (user_id),
-    KEY last_seen_at (last_seen_at)
+        // PRODUCT ↔ USE CASE MAP
+        $sqlUseCaseMap = "CREATE TABLE {$prefix}apify_product_use_case_map (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            canonical_hash VARCHAR(64) NOT NULL,
+            use_case_id BIGINT UNSIGNED NOT NULL,
+            confidence TINYINT UNSIGNED NOT NULL DEFAULT 100,
+            source VARCHAR(50) NOT NULL DEFAULT 'manual',
+            is_primary TINYINT(1) NOT NULL DEFAULT 0,
+            created_at DATETIME NOT NULL,
+            updated_at DATETIME NOT NULL,
+            PRIMARY KEY (id),
+            UNIQUE KEY map_unique (canonical_hash, use_case_id),
+            KEY canonical_idx (canonical_hash),
+            KEY use_case_idx (use_case_id),
+            KEY primary_idx (is_primary)
+        ) {$charsetCollate};";
 
-)  {$charsetCollate};
-";
-dbDelta($sql);
-dbDelta($sqlClicks);
-        // 🔥 EXECUTE
+        // PRODUCT ↔ GROUP MAP
+        $sqlGroupMap = "CREATE TABLE {$prefix}apify_product_group_map (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            canonical_hash VARCHAR(64) NOT NULL,
+            group_id BIGINT UNSIGNED NOT NULL,
+            confidence TINYINT UNSIGNED NOT NULL DEFAULT 100,
+            source VARCHAR(50) NOT NULL DEFAULT 'manual',
+            is_primary TINYINT(1) NOT NULL DEFAULT 0,
+            created_at DATETIME NOT NULL,
+            updated_at DATETIME NOT NULL,
+            PRIMARY KEY (id),
+            UNIQUE KEY map_unique (canonical_hash, group_id),
+            KEY canonical_idx (canonical_hash),
+            KEY group_idx (group_id),
+            KEY primary_idx (is_primary)
+        ) {$charsetCollate};";
+
+        // PRODUCT ↔ TAG MAP
+        $sqlTagMap = "CREATE TABLE {$prefix}apify_product_tag_map (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            canonical_hash VARCHAR(64) NOT NULL,
+            tag_id BIGINT UNSIGNED NOT NULL,
+            confidence TINYINT UNSIGNED NOT NULL DEFAULT 100,
+            source VARCHAR(50) NOT NULL DEFAULT 'manual',
+            is_primary TINYINT(1) NOT NULL DEFAULT 0,
+            created_at DATETIME NOT NULL,
+            updated_at DATETIME NOT NULL,
+            PRIMARY KEY (id),
+            UNIQUE KEY map_unique (canonical_hash, tag_id),
+            KEY canonical_idx (canonical_hash),
+            KEY tag_idx (tag_id),
+            KEY primary_idx (is_primary)
+        ) {$charsetCollate};";
+
         dbDelta($sqlProducts);
         dbDelta($sqlPrices);
         dbDelta($sqlMap);
@@ -213,5 +250,14 @@ dbDelta($sqlClicks);
         dbDelta($sqlLogs);
         dbDelta($sqlFeeds);
         dbDelta($sqlClicks);
+        dbDelta($sqlDevices);
+
+        dbDelta($sqlUseCases);
+        dbDelta($sqlGroups);
+        dbDelta($sqlTags);
+
+        dbDelta($sqlUseCaseMap);
+        dbDelta($sqlGroupMap);
+        dbDelta($sqlTagMap);
     }
 }

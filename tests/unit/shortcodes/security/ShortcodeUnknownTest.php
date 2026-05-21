@@ -2,7 +2,7 @@
 // tests/shortcodes/security/ShortcodeUnknownTest.php
 
 declare(strict_types=1);
-namespace Panda\Apify\Tests\Unit\Shortcodes\Security;
+namespace Tests\Unit\Shortcodes\Security;
 use PHPUnit\Framework\TestCase;
 use Panda\Apify\Shortcodes\ShortcodeManager;
 
