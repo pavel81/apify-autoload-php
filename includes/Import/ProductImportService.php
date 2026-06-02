@@ -4,27 +4,90 @@ declare(strict_types=1);
 
 namespace Panda\Apify\Import;
 
+use Panda\Apify\DTO\ProductIdentityDto;
 use Panda\Apify\Queries\ProductRepository;
+use Panda\Apify\Services\ImportPipelineService;
 use Panda\Apify\Services\ProductClassificationService;
+use Panda\Apify\Services\ProductIdentifierService;
+use Panda\Apify\Repositories\ProductIdentifierRepositoryInterface;
+use Panda\Apify\Queries\ProductRepositoryInterface;
 use Throwable;
 
 final class ProductImportService
 {
-    public function __construct(
-        private readonly ProductImportGuard $guard,
-        private readonly ProductImportValidator $validator,
-        private readonly ProductRepository $productRepository,
-        private readonly ProductClassificationService $classificationService
-    ) {
-    }
+  public function __construct(
+    private readonly ProductImportGuard $guard,
+    private readonly ProductImportValidator $validator,
+    private readonly ProductRepositoryInterface $productRepository,
+    private readonly ProductClassificationService $classificationService,
+    private readonly ImportPipelineService $pipelineService,
+    private readonly ProductIdentifierService $identifierService
+) {
+}
 
     /**
      * @param array<string, mixed> $payload
      * @return array<string, mixed>
      */
-    public function importOne(array $payload): array
+    public function importOne(array $payload, ?string $scopeKey = null, ?int $runId = null): array
     {
-        if (!$this->guard->acquire($payload)) {
+        $validation = $this->validator->validate($payload);
+
+        if (!$validation['success']) {
+            if ($runId !== null) {
+                $this->pipelineService->addError($runId, 'Payload validation failed');
+            }
+
+            return [
+                'success' => false,
+                'action' => 'invalid',
+                'errors' => $validation['errors'],
+                'message' => 'Payload validation failed',
+            ];
+        }
+
+        /** @var ProductIdentityDto $identity */
+        $identity = $validation['identity'];
+        $scope = null;
+
+        if ($scopeKey !== null && $scopeKey !== '') {
+            $scopeRow = $this->pipelineService->resolveScope($scopeKey);
+
+            if ($scopeRow === null) {
+                return [
+                    'success' => false,
+                    'action' => 'invalid_scope',
+                    'message' => 'Scope not found or inactive',
+                ];
+            }
+
+            $scope = $scopeRow;
+
+           if (!$this->matchesScope($identity, $payload, $scopeRow)) {
+                return [
+                    'success' => true,
+                    'action' => 'skipped',
+                    'message' => 'Payload does not match scope',
+                    'scope_key' => (string) ($scopeRow['scope_key'] ?? $scopeKey),
+                ];
+            }
+        }
+
+        $guardPayload = array_merge($payload, [
+            'canonical_hash' => $identity->canonicalHash,
+            'gtin' => $identity->gtin,
+            'ean' => $identity->ean,
+            'upc' => $identity->upc,
+            'mpn' => $identity->mpn,
+            'brand' => $identity->brand,
+            'manufacturer' => $identity->manufacturer,
+            'model' => $identity->model,
+            'scope_key' => $identity->scopeKey,
+            'geo_code' => $identity->geoCode,
+            'seller_group_code' => $identity->sellerGroupCode,
+        ]);
+
+        if (!$this->guard->acquire($guardPayload)) {
             return [
                 'success' => false,
                 'action' => 'duplicate',
@@ -33,74 +96,77 @@ final class ProductImportService
         }
 
         try {
-            $validation = $this->validator->validate($payload);
+            $normalized = $this->normalizePayload($payload, $identity);
 
-            if (!$validation['success']) {
-                return [
-                    'success' => false,
-                    'action' => 'invalid',
-                    'errors' => $validation['errors'],
-                    'message' => 'Payload validation failed',
-                ];
-            }
+            $productId = $this->productRepository->upsertProduct($normalized);
 
-            $data = $this->normalizePayload($validation['payload']);
-
-            $productId = $this->productRepository->upsertProduct($data);
-
-            if ($this->hasPrice($data)) {
+            if ($this->hasPrice($normalized)) {
                 $this->productRepository->insertPrice(
                     $productId,
-                    (string) $data['shop'],
-                    (string) $data['region'],
-                    (string) $data['sku'],
-                    (float) $data['price'],
-                    (string) $data['currency']
+                    (string) $normalized['shop'],
+                    (string) $normalized['region'],
+                    (string) $normalized['sku'],
+                    (float) $normalized['price'],
+                    (string) $normalized['currency']
                 );
             }
 
             $this->productRepository->mapCanonical(
                 $productId,
-                (string) $data['canonical_hash'],
-                (string) $data['shop'],
-                (string) $data['region']
+                (string) $normalized['canonical_hash'],
+                (string) $normalized['shop'],
+                (string) $normalized['region']
+            );
+            
+            $this->identifierService->saveForProduct(
+               $productId,
+               $identity,
+               $scopeId,
+               $runId ?? 0
             );
 
-            $classificationSynced = false;
+            $scopeId = isset($scope['id']) ? (int) $scope['id'] : 0;
 
-            if (
-                array_key_exists('use_cases', $validation['payload'])
-                && array_key_exists('product_groups', $validation['payload'])
-                && array_key_exists('tags', $validation['payload'])
-            ) {
-                $this->classificationService->syncCanonical(
-                    (string) $data['canonical_hash'],
-                    $data['use_cases'],
-                    $data['product_groups'],
-                    $data['tags'],
-                    true
-                );
+            $this->identifierService->saveForProduct(
+                $productId,
+                $identity,
+                $scopeId,
+                $runId ?? 0
+            );
 
-                $classificationSynced = true;
+            $this->classificationService->syncCanonical(
+                (string) $normalized['canonical_hash'],
+                $normalized['use_cases'],
+                $normalized['product_groups'],
+                $normalized['tags'],
+                true
+            );
+
+            if ($runId !== null) {
+                $this->pipelineService->finishRun($runId, 'finished', 'Imported successfully');
             }
 
             return [
                 'success' => true,
                 'action' => 'saved',
                 'product_id' => $productId,
-                'canonical_hash' => $data['canonical_hash'],
-                'slug' => $data['slug'],
-                'classification_synced' => $classificationSynced,
+                'canonical_hash' => $normalized['canonical_hash'],
+                'slug' => $normalized['slug'],
+                'classification_synced' => true,
                 'message' => 'Product imported successfully',
             ];
         } catch (Throwable $e) {
+            if ($runId !== null) {
+                $this->pipelineService->finishRun($runId, 'failed', $e->getMessage());
+            }
+
             return [
                 'success' => false,
                 'action' => 'failed',
                 'message' => $e->getMessage(),
             ];
         } finally {
-            $this->guard->release($payload);
+            $this->guard->release($guardPayload);
         }
     }
 
@@ -108,50 +174,94 @@ final class ProductImportService
      * @param array<int, array<string, mixed>> $items
      * @return array<int, array<string, mixed>>
      */
-    public function importBatch(array $items): array
+    public function importBatch(array $items, ?string $scopeKey = null): array
     {
+        $scope = null;
+
+        if ($scopeKey !== null && $scopeKey !== '') {
+            $scope = $this->pipelineService->resolveScope($scopeKey);
+
+            if ($scope === null) {
+                return [[
+                    'success' => false,
+                    'action' => 'invalid_scope',
+                    'message' => 'Scope not found or inactive',
+                ]];
+            }
+        }
+
+        $runId = $this->pipelineService->startRun([
+            'scope_id' => isset($scope['id']) ? (int) $scope['id'] : null,
+            'status' => 'running',
+            'batch_size' => count($items),
+            'source_type' => 'apify',
+        ]);
+
+        $this->pipelineService->markRunning($runId);
+
         $results = [];
 
         foreach ($items as $item) {
-            $results[] = $this->importOne($item);
+            $results[] = $this->importOne($item, $scopeKey, $runId);
         }
+
+        $hasFailures = false;
+        foreach ($results as $result) {
+            if (($result['success'] ?? false) === false) {
+                $hasFailures = true;
+                break;
+            }
+        }
+
+        $this->pipelineService->finishRun(
+            $runId,
+            $hasFailures ? 'finished_with_errors' : 'finished',
+            $hasFailures ? 'Batch completed with errors' : 'Batch completed'
+        );
 
         return $results;
     }
 
     /**
-     * @param array<string, mixed> $data
+     * @param array<string, mixed> $payload
+     * @param ProductIdentityDto $identity
      * @return array<string, mixed>
      */
-    private function normalizePayload(array $data): array
+    private function normalizePayload(array $payload, ProductIdentityDto $identity): array
     {
-        $title = (string) ($data['title'] ?? '');
+        $title = (string) ($payload['title'] ?? '');
         $slug = sanitize_title($title);
 
-        $canonicalHash = (string) ($data['canonical_hash'] ?? '');
-        if ($canonicalHash === '') {
-            $canonicalHash = $this->deriveCanonicalHash($data, $slug);
+        $canonicalHash = $identity->canonicalHash;
+        if ($canonicalHash === null || $canonicalHash === '') {
+            $canonicalHash = hash('sha256', $identity->identitySeed() . '|' . $slug);
         }
 
         return [
-            'external_id' => (string) ($data['external_id'] ?? ''),
-            'sku' => (string) ($data['sku'] ?? ''),
-            'shop' => (string) ($data['shop'] ?? ''),
-            'region' => (string) ($data['region'] ?? ''),
-            'domain' => (string) ($data['domain'] ?? ''),
+            'external_id' => (string) ($payload['external_id'] ?? ''),
+            'sku' => (string) ($payload['sku'] ?? ''),
+            'shop' => (string) ($payload['shop'] ?? ''),
+            'region' => (string) ($payload['region'] ?? ''),
+            'domain' => (string) ($payload['domain'] ?? ''),
+            'category_code' => (string) ($payload['category_code'] ?? ''),
+            'geo_code' => (string) ($payload['geo_code'] ?? ''),
+            'seller_group_code' => (string) ($payload['seller_group_code'] ?? ''),
             'title' => $title,
             'slug' => $slug,
-            'url' => (string) ($data['url'] ?? ''),
-            'image' => (string) ($data['image'] ?? ''),
-            'description' => (string) ($data['description'] ?? ''),
+            'url' => (string) ($payload['url'] ?? ''),
+            'image' => (string) ($payload['image'] ?? ''),
+            'description' => (string) ($payload['description'] ?? ''),
             'canonical_hash' => $canonicalHash,
-            'brand' => (string) ($data['brand'] ?? ''),
-            'model' => (string) ($data['model'] ?? ''),
-            'price' => $data['price'] ?? null,
-            'currency' => (string) ($data['currency'] ?? ''),
-            'use_cases' => $this->normalizeClassificationItems($data['use_cases'] ?? []),
-            'product_groups' => $this->normalizeClassificationItems($data['product_groups'] ?? []),
-            'tags' => $this->normalizeClassificationItems($data['tags'] ?? []),
+            'brand' => $identity->brand,
+            'manufacturer' => $identity->manufacturer,
+            'model' => $identity->model,
+            'mpn' => $identity->mpn,
+            'gtin' => $identity->gtin,
+            'price' => $payload['price'] ?? null,
+            'currency' => (string) ($payload['currency'] ?? ''),
+            'use_cases' => $this->normalizeClassificationItems($payload['use_cases'] ?? []),
+            'product_groups' => $this->normalizeClassificationItems($payload['product_groups'] ?? []),
+            'tags' => $this->normalizeClassificationItems($payload['tags'] ?? []),
         ];
     }
 
@@ -164,25 +274,33 @@ final class ProductImportService
     }
 
     /**
-     * @param array<string, mixed> $data
-     */
-    private function deriveCanonicalHash(array $data, string $slug): string
-    {
-        return hash(
-            'sha256',
-            implode('|', [
-                (string) ($data['external_id'] ?? ''),
-                (string) ($data['shop'] ?? ''),
-                (string) ($data['region'] ?? ''),
-                (string) ($data['sku'] ?? ''),
-                (string) ($data['domain'] ?? ''),
-                (string) ($data['brand'] ?? ''),
-                (string) ($data['model'] ?? ''),
-                $slug,
-            ])
-        );
+ * @param array<string, mixed> $payload
+ * @param array<string, mixed> $scope
+ */
+private function matchesScope(ProductIdentityDto $identity, array $payload, array $scope): bool
+{
+    $scopeCategory = (string) ($scope['category_code'] ?? '');
+    $scopeGeo = (string) ($scope['geo_code'] ?? '');
+    $scopeSeller = (string) ($scope['seller_group_code'] ?? '');
+
+    $payloadCategory = (string) ($payload['category_code'] ?? '');
+    $payloadGeo = (string) ($payload['geo_code'] ?? '');
+    $payloadSeller = (string) ($payload['seller_group_code'] ?? '');
+
+    if ($scopeCategory !== '' && $payloadCategory !== $scopeCategory) {
+        return false;
     }
 
+    if ($scopeGeo !== '' && $payloadGeo !== $scopeGeo) {
+        return false;
+    }
+
+    if ($scopeSeller !== '' && $payloadSeller !== $scopeSeller) {
+        return false;
+    }
+
+    return true;
+}
     /**
      * @param mixed $value
      * @return array<int, array<string, mixed>>

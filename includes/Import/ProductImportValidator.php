@@ -4,37 +4,48 @@ declare(strict_types=1);
 
 namespace Panda\Apify\Import;
 
+use Panda\Apify\DTO\ProductIdentityDto;
+
 final class ProductImportValidator
 {
     /**
-     * @phpstan-param array<string, mixed> $payload
-     * @phpstan-return array{
-     *     success: bool,
-     *     errors: array<int, string>,
-     *     payload: array<string, mixed>
-     * }
+     * @param array<string, mixed> $payload
+     * @return array{success: bool, errors: array<int, string>, payload?: array<string, mixed>, identity?: ProductIdentityDto}
      */
     public function validate(array $payload): array
     {
-        $normalized = $this->normalize($payload);
         $errors = [];
 
         foreach (['external_id', 'sku', 'shop', 'region', 'domain', 'title'] as $field) {
-            if ($normalized[$field] === '') {
+            if (trim((string) ($payload[$field] ?? '')) === '') {
                 $errors[] = sprintf('Missing required field: %s', $field);
             }
         }
 
-        if ($normalized['url'] !== '' && filter_var($normalized['url'], FILTER_VALIDATE_URL) === false) {
+        $identity = ProductIdentityDto::fromArray($payload);
+
+        if (!$this->validateBarcodeField($identity->gtin)) {
+            $errors[] = 'Invalid GTIN';
+        }
+
+        if (!$this->validateBarcodeField($identity->ean)) {
+            $errors[] = 'Invalid EAN';
+        }
+
+        if (!$this->validateBarcodeField($identity->upc)) {
+            $errors[] = 'Invalid UPC';
+        }
+
+        if ($identity->mpn !== null && $identity->mpn === '') {
+            $errors[] = 'Invalid MPN';
+        }
+
+        if (($payload['url'] ?? '') !== '' && filter_var((string) $payload['url'], FILTER_VALIDATE_URL) === false) {
             $errors[] = 'Invalid URL';
         }
 
-        if ($normalized['price'] !== null && !is_numeric($normalized['price'])) {
+        if (array_key_exists('price', $payload) && $payload['price'] !== null && $payload['price'] !== '' && !is_numeric($payload['price'])) {
             $errors[] = 'Invalid price';
-        }
-
-        if ($normalized['currency'] !== '' && strlen($normalized['currency']) > 10) {
-            $errors[] = 'Invalid currency';
         }
 
         foreach (['use_cases', 'product_groups', 'tags'] as $bucket) {
@@ -43,37 +54,29 @@ final class ProductImportValidator
             }
         }
 
+        if ($errors !== []) {
+            return [
+                'success' => false,
+                'errors' => $errors,
+            ];
+        }
+
         return [
-            'success' => $errors === [],
-            'errors' => $errors,
-            'payload' => $normalized,
+            'success' => true,
+            'errors' => [],
+            'payload' => $payload,
+            'identity' => $identity,
         ];
     }
 
-    /**
-     * @phpstan-param array<string, mixed> $payload
-     * @phpstan-return array<string, mixed>
-     */
-    private function normalize(array $payload): array
+    private function validateBarcodeField(?string $value): bool
     {
-        return [
-            'external_id' => trim((string) ($payload['external_id'] ?? '')),
-            'sku' => trim((string) ($payload['sku'] ?? '')),
-            'shop' => trim((string) ($payload['shop'] ?? '')),
-            'region' => trim((string) ($payload['region'] ?? '')),
-            'domain' => trim((string) ($payload['domain'] ?? '')),
-            'title' => trim((string) ($payload['title'] ?? '')),
-            'url' => trim((string) ($payload['url'] ?? '')),
-            'image' => trim((string) ($payload['image'] ?? '')),
-            'description' => trim((string) ($payload['description'] ?? '')),
-            'canonical_hash' => trim((string) ($payload['canonical_hash'] ?? '')),
-            'brand' => trim((string) ($payload['brand'] ?? '')),
-            'model' => trim((string) ($payload['model'] ?? '')),
-            'price' => array_key_exists('price', $payload) && $payload['price'] !== '' ? $payload['price'] : null,
-            'currency' => trim((string) ($payload['currency'] ?? '')),
-            'use_cases' => $payload['use_cases'] ?? [],
-            'product_groups' => $payload['product_groups'] ?? [],
-            'tags' => $payload['tags'] ?? [],
-        ];
+        if ($value === null || $value === '') {
+            return true;
+        }
+
+        $length = strlen($value);
+
+        return in_array($length, [8, 12, 13, 14], true);
     }
 }

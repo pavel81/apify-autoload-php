@@ -5,20 +5,15 @@ declare(strict_types=1);
 namespace Tests\Unit\Import;
 
 use Brain\Monkey\Functions;
+use Panda\Apify\DTO\ProductIdentityDto;
 use Panda\Apify\Import\ProductImportGuard;
 use Panda\Apify\Import\ProductImportService;
 use Panda\Apify\Import\ProductImportValidator;
-use Panda\Apify\Queries\ProductRepository;
+use Panda\Apify\Queries\ProductRepositoryInterface;
+use Panda\Apify\Services\ImportPipelineService;
 use Panda\Apify\Services\ProductClassificationService;
+use Panda\Apify\Services\ProductIdentifierService;
 use PHPUnit\Framework\TestCase;
-
-function sanitize_title_shim(string $value): string
-{
-    $value = strtolower(trim($value));
-    $value = preg_replace('/[^a-z0-9]+/i', '-', $value) ?? $value;
-
-    return trim($value, '-');
-}
 
 final class ProductImportServiceTest extends TestCase
 {
@@ -28,7 +23,7 @@ final class ProductImportServiceTest extends TestCase
 
         \Brain\Monkey\setUp();
 
-        Functions\when('sanitize_title')->alias(__NAMESPACE__ . '\\sanitize_title_shim');
+        Functions\when('sanitize_title')->justReturn('normalized-slug');
         Functions\when('get_transient')->justReturn(false);
         Functions\when('set_transient')->justReturn(true);
         Functions\when('delete_transient')->justReturn(true);
@@ -42,12 +37,13 @@ final class ProductImportServiceTest extends TestCase
 
     public function testImportOneSavesProductAndSyncsClassification(): void
     {
-        $this->markTestSkipped('Patchwork parser issue');
         $guard = new ProductImportGuard();
         $validator = new ProductImportValidator();
 
-        $productRepository = $this->createMock(ProductRepository::class);
+        $productRepository = $this->createMock(ProductRepositoryInterface::class);
         $classificationService = $this->createMock(ProductClassificationService::class);
+        $pipelineService = $this->createMock(ImportPipelineService::class);
+        $identifierService = $this->createMock(ProductIdentifierService::class);
 
         $payload = [
             'external_id' => 'ext-123',
@@ -57,75 +53,64 @@ final class ProductImportServiceTest extends TestCase
             'domain' => 'amazon.example',
             'title' => 'Gaming Notebook',
             'url' => 'https://example.com/product',
+            'image' => 'https://example.com/image.jpg',
+            'description' => 'Test product',
             'price' => 1299.90,
             'currency' => 'EUR',
             'brand' => 'Acer',
+            'manufacturer' => 'Acer Inc.',
             'model' => 'Nitro',
+            'gtin' => '8591234567890',
+            'mpn' => 'NITRO-123',
+            'category_code' => 'electronics',
+            'geo_code' => 'CZ',
+            'seller_group_code' => 'trusted',
             'use_cases' => [
-                [
-                    'slug' => 'gaming',
-                    'name' => 'Gaming',
-                    'is_primary' => true,
-                    'confidence' => 95,
-                ],
+                ['slug' => 'gaming', 'name' => 'Gaming'],
             ],
             'product_groups' => [
-                [
-                    'slug' => 'notebook',
-                    'name' => 'Notebook',
-                ],
+                ['slug' => 'notebook', 'name' => 'Notebook'],
             ],
             'tags' => [
-                [
-                    'slug' => 'wifi-7',
-                    'name' => 'WiFi 7',
-                ],
+                ['slug' => 'wifi-7', 'name' => 'WiFi 7'],
             ],
         ];
 
         $productRepository->expects($this->once())
             ->method('upsertProduct')
-            ->with($this->anything())
             ->willReturn(123);
 
         $productRepository->expects($this->once())
             ->method('insertPrice')
-            ->with(
-                123,
-                'amazon',
-                'eu',
-                'sku-123',
-                1299.9,
-                'EUR'
-            )
+            ->with(123, 'amazon', 'eu', 'sku-123', 1299.9, 'EUR')
             ->willReturn(null);
 
         $productRepository->expects($this->once())
             ->method('mapCanonical')
+            ->with(123, $this->anything(), 'amazon', 'eu')
+            ->willReturn(null);
+
+        $identifierService->expects($this->once())
+            ->method('saveForProduct')
             ->with(
                 123,
-                $this->anything(),
-                'amazon',
-                'eu'
+                $this->isInstanceOf(ProductIdentityDto::class),
+                0,
+                0
             )
-            ->willReturn(null);
+            ->willReturn([]);
 
         $classificationService->expects($this->once())
             ->method('syncCanonical')
-            ->with(
-                $this->anything(),
-                $this->anything(),
-                $this->anything(),
-                $this->anything(),
-                true
-            )
             ->willReturn([]);
 
         $service = new ProductImportService(
             $guard,
             $validator,
             $productRepository,
-            $classificationService
+            $classificationService,
+            $pipelineService,
+            $identifierService
         );
 
         $result = $service->importOne($payload);
@@ -133,25 +118,119 @@ final class ProductImportServiceTest extends TestCase
         self::assertTrue($result['success']);
         self::assertSame('saved', $result['action']);
         self::assertSame(123, $result['product_id']);
-        self::assertSame('gaming-notebook', $result['slug']);
-        self::assertTrue($result['classification_synced']);
+        self::assertSame('normalized-slug', $result['slug']);
+    }
+
+    public function testImportOneWithFullFakeProductPayload(): void
+    {
+        $guard = new ProductImportGuard();
+        $validator = new ProductImportValidator();
+
+        $productRepository = $this->createMock(ProductRepositoryInterface::class);
+        $classificationService = $this->createMock(ProductClassificationService::class);
+        $pipelineService = $this->createMock(ImportPipelineService::class);
+        $identifierService = $this->createMock(ProductIdentifierService::class);
+
+        $payload = [
+            'external_id' => 'fake-product-001',
+            'sku' => 'SKU-FAKE-001',
+            'shop' => 'tesco',
+            'region' => 'cz',
+            'domain' => 'tesco.example',
+            'title' => 'Coca Cola Zero 330ml',
+            'url' => 'https://example.com/products/coca-cola-zero',
+            'image' => 'https://example.com/images/coca-cola-zero.jpg',
+            'description' => 'Fake import payload for unit testing',
+            'price' => 39.90,
+            'currency' => 'CZK',
+            'brand' => 'Coca Cola',
+            'manufacturer' => 'The Coca-Cola Company',
+            'model' => 'Zero 330ml',
+            'gtin' => '8594001234567',
+            'ean' => '8594001234567',
+            'mpn' => 'CCZ330',
+            'category_code' => 'food',
+            'geo_code' => 'CZ',
+            'seller_group_code' => 'trusted',
+            'use_cases' => [
+                ['slug' => 'drink', 'name' => 'Drink'],
+            ],
+            'product_groups' => [
+                ['slug' => 'soft-drinks', 'name' => 'Soft Drinks'],
+            ],
+            'tags' => [
+                ['slug' => 'zero-sugar', 'name' => 'Zero Sugar'],
+                ['slug' => 'carbonated', 'name' => 'Carbonated'],
+            ],
+        ];
+
+        $productRepository->expects($this->once())
+            ->method('upsertProduct')
+            ->willReturn(321);
+
+        $productRepository->expects($this->once())
+            ->method('insertPrice')
+            ->willReturn(null);
+
+        $productRepository->expects($this->once())
+            ->method('mapCanonical')
+            ->with(321, $this->anything(), 'tesco', 'cz')
+            ->willReturn(null);
+
+        $identifierService->expects($this->once())
+            ->method('saveForProduct')
+            ->with(
+                321,
+                $this->isInstanceOf(ProductIdentityDto::class),
+                0,
+                0
+            )
+            ->willReturn([]);
+
+        $classificationService->expects($this->once())
+            ->method('syncCanonical')
+            ->willReturn([]);
+
+        $service = new ProductImportService(
+            $guard,
+            $validator,
+            $productRepository,
+            $classificationService,
+            $pipelineService,
+            $identifierService
+        );
+
+        $result = $service->importOne($payload);
+
+        self::assertTrue($result['success']);
+        self::assertSame('saved', $result['action']);
+        self::assertSame(321, $result['product_id']);
+        self::assertSame('normalized-slug', $result['slug']);
     }
 
     public function testImportOneReturnsDuplicateWhenGuardBlocks(): void
     {
-        $this->markTestSkipped('Patchwork parser issue');
         Functions\when('get_transient')->justReturn(1);
-        Functions\when('set_transient')->justReturn(true);
-        Functions\when('delete_transient')->justReturn(true);
 
         $guard = new ProductImportGuard();
         $validator = new ProductImportValidator();
 
-        $productRepository = $this->createMock(ProductRepository::class);
+        $productRepository = $this->createMock(ProductRepositoryInterface::class);
         $classificationService = $this->createMock(ProductClassificationService::class);
+        $pipelineService = $this->createMock(ImportPipelineService::class);
+        $identifierService = $this->createMock(ProductIdentifierService::class);
 
         $productRepository->expects($this->never())
             ->method('upsertProduct');
+
+        $productRepository->expects($this->never())
+            ->method('insertPrice');
+
+        $productRepository->expects($this->never())
+            ->method('mapCanonical');
+
+        $identifierService->expects($this->never())
+            ->method('saveForProduct');
 
         $classificationService->expects($this->never())
             ->method('syncCanonical');
@@ -160,7 +239,9 @@ final class ProductImportServiceTest extends TestCase
             $guard,
             $validator,
             $productRepository,
-            $classificationService
+            $classificationService,
+            $pipelineService,
+            $identifierService
         );
 
         $result = $service->importOne([

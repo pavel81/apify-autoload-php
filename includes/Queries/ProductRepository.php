@@ -10,7 +10,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-final class ProductRepository
+final class ProductRepository implements ProductRepositoryInterface
 {
     private wpdb $db;
 

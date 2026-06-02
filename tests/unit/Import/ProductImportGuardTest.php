@@ -24,16 +24,20 @@ final class ProductImportGuardTest extends TestCase
 
     public function testAcquireAndReleaseWorkForNewPayload(): void
     {
-        $this->markTestSkipped('Patchwork parser issue');
         Functions\when('get_transient')->justReturn(false);
 
         Functions\expect('set_transient')
             ->once()
+            ->with(
+                $this->isType('string'),
+                1,
+                120
+            )
             ->andReturn(true);
 
         Functions\expect('delete_transient')
             ->once()
-            ->andReturn(true);
+            ->with($this->isType('string'));
 
         $guard = new ProductImportGuard();
 
@@ -52,7 +56,6 @@ final class ProductImportGuardTest extends TestCase
 
     public function testAcquireReturnsFalseForExistingLock(): void
     {
-    $this->markTestSkipped('Patchwork parser issue');
         Functions\when('get_transient')->justReturn(1);
 
         $guard = new ProductImportGuard();
