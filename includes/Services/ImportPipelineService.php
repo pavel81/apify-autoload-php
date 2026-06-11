@@ -4,16 +4,14 @@ declare(strict_types=1);
 
 namespace Panda\Apify\Services;
 
-use Panda\Apify\Repositories\ImportRunRepository;
-use Panda\Apify\Repositories\ScopeRepository;
 use Panda\Apify\Repositories\ScopeRepositoryInterface;
 use Panda\Apify\Repositories\ImportRunRepositoryInterface;
 
 final class ImportPipelineService
 {
     public function __construct(
-        private ScopeRepository $scopeRepository,
-        private ImportRunRepository $importRunRepository
+         private ScopeRepositoryInterface $scopeRepository,
+         private ImportRunRepositoryInterface $importRunRepository
     ) {
     }
 
@@ -22,7 +20,7 @@ final class ImportPipelineService
      */
     public function resolveScope(string $scopeKey): ?array
     {
-        return $this->scopeRepository->findByKey($scopeKey);
+        return $this->ScopeRepository->findByKey($scopeKey);
     }
 
     /**

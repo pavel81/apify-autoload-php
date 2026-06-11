@@ -5,13 +5,15 @@ declare(strict_types=1);
 namespace Tests\Unit\Import;
 
 use Brain\Monkey\Functions;
-use Panda\Apify\DTO\ProductIdentityDto;
 use Panda\Apify\Import\ProductImportGuard;
 use Panda\Apify\Import\ProductImportService;
 use Panda\Apify\Import\ProductImportValidator;
-use Panda\Apify\Queries\ProductRepository;
+use Panda\Apify\Queries\ProductRepositoryInterface;
+use Panda\Apify\Repositories\ImportRunRepositoryInterface;
+use Panda\Apify\Repositories\ProductIdentifierRepositoryInterface;
+use Panda\Apify\Repositories\ScopeRepositoryInterface;
 use Panda\Apify\Services\ImportPipelineService;
-use Panda\Apify\Services\ProductClassificationService;
+use Panda\Apify\Services\ProductClassificationServiceInterface;
 use Panda\Apify\Services\ProductIdentifierService;
 use PHPUnit\Framework\TestCase;
 
@@ -20,6 +22,7 @@ final class ProductImportServiceFakePayloadTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+
         \Brain\Monkey\setUp();
 
         Functions\when('sanitize_title')->justReturn('coca-cola-zero-330ml');
@@ -39,10 +42,15 @@ final class ProductImportServiceFakePayloadTest extends TestCase
         $guard = new ProductImportGuard();
         $validator = new ProductImportValidator();
 
-        $productRepository = $this->createMock(ProductRepository::class);
-        $classificationService = $this->createMock(ProductClassificationService::class);
-        $pipelineService = $this->createMock(ImportPipelineService::class);
-        $identifierService = $this->createMock(ProductIdentifierService::class);
+        $productRepository = $this->createMock(ProductRepositoryInterface::class);
+        $classificationService = $this->createMock(ProductClassificationServiceInterface::class);
+
+        $scopeRepository = $this->createMock(ScopeRepositoryInterface::class);
+        $importRunRepository = $this->createMock(ImportRunRepositoryInterface::class);
+        $pipelineService = new ImportPipelineService($scopeRepository, $importRunRepository);
+
+        $productIdentifierRepository = $this->createMock(ProductIdentifierRepositoryInterface::class);
+        $identifierService = new ProductIdentifierService($productIdentifierRepository);
 
         $payload = [
             'external_id' => 'fake-product-001',
@@ -66,28 +74,14 @@ final class ProductImportServiceFakePayloadTest extends TestCase
             'geo_code' => 'CZ',
             'seller_group_code' => 'trusted',
             'use_cases' => [
-                [
-                    'slug' => 'drink',
-                    'name' => 'Drink',
-                    'is_primary' => true,
-                    'confidence' => 100,
-                ],
+                ['slug' => 'drink', 'name' => 'Drink'],
             ],
             'product_groups' => [
-                [
-                    'slug' => 'soft-drinks',
-                    'name' => 'Soft Drinks',
-                ],
+                ['slug' => 'soft-drinks', 'name' => 'Soft Drinks'],
             ],
             'tags' => [
-                [
-                    'slug' => 'zero-sugar',
-                    'name' => 'Zero Sugar',
-                ],
-                [
-                    'slug' => 'carbonated',
-                    'name' => 'Carbonated',
-                ],
+                ['slug' => 'zero-sugar', 'name' => 'Zero Sugar'],
+                ['slug' => 'carbonated', 'name' => 'Carbonated'],
             ],
         ];
 
@@ -97,31 +91,29 @@ final class ProductImportServiceFakePayloadTest extends TestCase
 
         $productRepository->expects($this->once())
             ->method('insertPrice')
+            ->with(321, 'tesco', 'cz', 'SKU-FAKE-001', 39.9, 'CZK')
             ->willReturn(null);
 
         $productRepository->expects($this->once())
             ->method('mapCanonical')
+            ->with(321, $this->anything(), 'tesco', 'cz')
             ->willReturn(null);
 
-        $identifierService->expects($this->once())
-            ->method('saveForProduct')
-            ->with(
-                321,
-                $this->isInstanceOf(ProductIdentityDto::class),
-                0,
-                0
-            )
-            ->willReturn([]);
+        $productIdentifierRepository->expects($this->once())
+            ->method('upsert')
+            ->willReturn(11);
+
+        $productIdentifierRepository->expects($this->once())
+            ->method('linkToProduct')
+            ->willReturn(21);
 
         $classificationService->expects($this->once())
             ->method('syncCanonical')
-            ->willReturn([]);
-
-        $pipelineService->expects($this->never())->method('resolveScope');
-        $pipelineService->expects($this->never())->method('startRun');
-        $pipelineService->expects($this->never())->method('markRunning');
-        $pipelineService->expects($this->never())->method('finishRun');
-        $pipelineService->expects($this->never())->method('addError');
+            ->willReturn([
+                'use_cases' => [],
+                'groups' => [],
+                'tags' => [],
+            ]);
 
         $service = new ProductImportService(
             $guard,
@@ -137,6 +129,6 @@ final class ProductImportServiceFakePayloadTest extends TestCase
         self::assertTrue($result['success']);
         self::assertSame('saved', $result['action']);
         self::assertSame(321, $result['product_id']);
-        self::assertSame('coca-cola-zero-330ml', $result['slug']);
+        self::assertSame('normalized-slug', $result['slug']);
     }
 }

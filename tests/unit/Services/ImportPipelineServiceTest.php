@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Unit\Services;
 
-use Panda\Apify\Repositories\ImportRunRepository;
-use Panda\Apify\Repositories\ScopeRepository;
+use Panda\Apify\Repositories\ImportRunRepositoryInterface;
+use Panda\Apify\Repositories\ScopeRepositoryInterface;
 use Panda\Apify\Services\ImportPipelineService;
 use PHPUnit\Framework\TestCase;
 
@@ -13,8 +13,8 @@ final class ImportPipelineServiceTest extends TestCase
 {
     public function testResolveScopeReturnsScopeRow(): void
     {
-        $scopeRepository = $this->createMock(ScopeRepository::class);
-        $importRunRepository = $this->createMock(ImportRunRepository::class);
+        $scopeRepository = $this->createMock(ScopeRepositoryInterface::class);
+        $importRunRepository = $this->createMock(ImportRunRepositoryInterface::class);
 
         $scopeRepository->expects($this->once())
             ->method('findByKey')
@@ -37,8 +37,8 @@ final class ImportPipelineServiceTest extends TestCase
 
     public function testStartRunCreatesImportRun(): void
     {
-        $scopeRepository = $this->createMock(ScopeRepository::class);
-        $importRunRepository = $this->createMock(ImportRunRepository::class);
+        $scopeRepository = $this->createMock(ScopeRepositoryInterface::class);
+        $importRunRepository = $this->createMock(ImportRunRepositoryInterface::class);
 
         $importRunRepository->expects($this->once())
             ->method('create')

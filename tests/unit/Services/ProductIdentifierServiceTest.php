@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Tests\Unit\Services;
 
 use Panda\Apify\DTO\ProductIdentityDto;
-use Panda\Apify\Repositories\ProductIdentifierRepository;
+use Panda\Apify\Repositories\ProductIdentifierRepositoryInterface;
 use Panda\Apify\Services\ProductIdentifierService;
 use PHPUnit\Framework\TestCase;
 
@@ -13,7 +13,7 @@ final class ProductIdentifierServiceTest extends TestCase
 {
     public function testBuildIdentifierRowsCreatesRowsForPresentIdentifiers(): void
     {
-        $repository = $this->createMock(ProductIdentifierRepository::class);
+        $repository = $this->createMock(ProductIdentifierRepositoryInterface::class);
         $service = new ProductIdentifierService($repository);
 
         $identity = new ProductIdentityDto(
@@ -37,7 +37,7 @@ final class ProductIdentifierServiceTest extends TestCase
 
     public function testSaveForProductStoresAndLinksIdentifiers(): void
     {
-        $repository = $this->createMock(ProductIdentifierRepository::class);
+        $repository = $this->createMock(ProductIdentifierRepositoryInterface::class);
         $service = new ProductIdentifierService($repository);
 
         $identity = new ProductIdentityDto(

@@ -5,8 +5,9 @@ declare(strict_types=1);
 namespace Panda\Apify\Services;
 
 use Panda\Apify\Queries\ClassificationRepository;
+use Panda\Apify\Services\ProductClassificationServiceInterface;
 
-final class ProductClassificationService
+final class ProductClassificationService implements ProductClassificationServiceInterface
 {
     public function __construct(private ClassificationRepository $repository)
     {

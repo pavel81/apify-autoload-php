@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Panda\Apify\Services;
 
 use Panda\Apify\DTO\ProductIdentityDto;
-use Panda\Apify\Repositories\ProductIdentifierRepository;
 use Panda\Apify\Repositories\ProductIdentifierRepositoryInterface;
 
 if (!defined('ABSPATH')) {
@@ -15,7 +14,7 @@ if (!defined('ABSPATH')) {
 final class ProductIdentifierService
 {
     public function __construct(
-        private readonly ProductIdentifierRepository $repository
+        private readonly ProductIdentifierRepositoryInterface $repository
     ) {
     }
 

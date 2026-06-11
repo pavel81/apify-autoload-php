@@ -1,36 +1,34 @@
 <?php
+<?php
 
 declare(strict_types=1);
 
 namespace Panda\Apify\Import;
 
 use Panda\Apify\DTO\ProductIdentityDto;
-use Panda\Apify\Queries\ProductRepository;
-use Panda\Apify\Services\ImportPipelineService;
-use Panda\Apify\Services\ProductClassificationService;
-use Panda\Apify\Services\ProductIdentifierService;
-use Panda\Apify\Repositories\ProductIdentifierRepositoryInterface;
 use Panda\Apify\Queries\ProductRepositoryInterface;
+use Panda\Apify\Services\ImportPipelineService;
+use Panda\Apify\Services\ProductClassificationServiceInterface;
+use Panda\Apify\Services\ProductIdentifierService;
 use Throwable;
 
 final class ProductImportService
 {
-  public function __construct(
-    private readonly ProductImportGuard $guard,
-    private readonly ProductImportValidator $validator,
-    private readonly ProductRepositoryInterface $productRepository,
-    private readonly ProductClassificationService $classificationService,
-    private readonly ImportPipelineService $pipelineService,
-    private readonly ProductIdentifierService $identifierService
-) {
-}
+    public function __construct(
+        private readonly ProductImportGuard $guard,
+        private readonly ProductImportValidator $validator,
+        private readonly ProductRepositoryInterface $productRepository,
+        private readonly ProductClassificationServiceInterface $classificationService,
+        private readonly ImportPipelineService $pipelineService,
+        private readonly ProductIdentifierService $identifierService
+    ) {
+    }
 
     /**
      * @param array<string, mixed> $payload
      * @return array<string, mixed>
      */
     public function importOne(array $payload, ?string $scopeKey = null, ?int $runId = null): array
-    {
         $validation = $this->validator->validate($payload);
 
         if (!$validation['success']) {
